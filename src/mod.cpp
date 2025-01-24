@@ -1,4 +1,5 @@
 #include "./process.h"
+#include "./mod.h"
 #include "mcts.h"
 #include "config.h"
 #include "bvh.h"
@@ -46,6 +47,23 @@ namespace coacd
         
 
         return bestplane;
+    }
+
+    MeshScore ComputeScore(Model &mesh, Params &params){
+        vector<Model> parts = Compute(mesh, params);
+
+        MeshScore score;
+        score.hulls_num = parts.size();
+        double avg_concavity = 0;
+        for (int i = 0; i < (int)parts.size(); i++)
+        {
+            Model ch;
+            parts[i].ComputeAPX(ch, params.apx_mode, true);
+            avg_concavity += ComputeHCost(parts[i], ch, params.rv_k, params.resolution, params.seed, 0.0001, false);
+        }
+        avg_concavity /= parts.size();
+        score.avg_concavity = avg_concavity;
+        return score;
     }
 
 }

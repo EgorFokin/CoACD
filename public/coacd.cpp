@@ -288,9 +288,90 @@ CoACD_Plane CoACD_bestCuttingPlane(CoACD_Mesh const &input, double threshold,
   plane.d = bestplane.d;
 
   return plane;
-
-
 }
 
+COACD_MeshScore CoACD_meshScore(CoACD_Mesh const &input, double threshold,
+                          int max_convex_hull, int preprocess_mode,
+                          int prep_resolution, int sample_resolution,
+                          int mcts_nodes, int mcts_iteration,
+                          int mcts_max_depth, bool pca, bool merge,
+                          bool decimate, int max_ch_vertex,
+                          bool extrude, double extrude_margin,
+                          int apx_mode, unsigned int seed){
+  coacd::Mesh mesh;
+  for (uint64_t i = 0; i < input.vertices_count; ++i) {
+    mesh.vertices.push_back({input.vertices_ptr[3 * i],
+                             input.vertices_ptr[3 * i + 1],
+                             input.vertices_ptr[3 * i + 2]});
+  }
+  for (uint64_t i = 0; i < input.triangles_count; ++i) {
+    mesh.indices.push_back({input.triangles_ptr[3 * i],
+                            input.triangles_ptr[3 * i + 1],
+                            input.triangles_ptr[3 * i + 2]});
+  }
 
+  std::string pm, apx;
+  if (preprocess_mode == preprocess_on) {
+    pm = "on";
+  } else if (preprocess_mode == preprocess_off) {
+    pm = "off";
+  } else {
+    pm = "auto";
+  }
+
+  if (apx_mode == apx_ch) {
+    apx = "ch";
+  } else if (apx_mode == apx_box) {
+    apx = "box";
+  } else {
+    throw std::runtime_error("invalid approximation mode " + std::to_string(apx_mode));
+  }
+
+  coacd::Params params;
+  params.input_model = "";
+  params.output_name = "";
+  params.threshold = threshold;
+  params.max_convex_hull = max_convex_hull;
+  params.preprocess_mode = preprocess_mode;
+  params.prep_resolution = prep_resolution;
+  params.resolution = sample_resolution;
+  params.mcts_nodes = mcts_nodes;
+  params.mcts_iteration = mcts_iteration;
+  params.mcts_max_depth = mcts_max_depth;
+  params.pca = pca;
+  params.merge = merge;
+  params.decimate = decimate;
+  params.max_ch_vertex = max_ch_vertex;
+  params.extrude = extrude;
+  params.extrude_margin = extrude_margin;
+  params.apx_mode = apx_mode;
+  params.seed = seed;
+
+  coacd::Model m;
+  m.Load(mesh.vertices, mesh.indices);
+  vector<double> bbox = m.Normalize();
+  array<array<double, 3>, 3> rot{
+      {{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}}};
+
+  if (params.preprocess_mode == std::string("auto")) {
+    bool is_manifold = IsManifold(m);
+    if (!is_manifold)
+      ManifoldPreprocess(params, m);
+  } else if (params.preprocess_mode == std::string("on")) {
+    ManifoldPreprocess(params, m);
+  }
+
+  if (pca) {
+    rot = m.PCA();
+  }
+
+  coacd::MeshScore score = coacd::ComputeScore(m, params);
+
+  COACD_MeshScore meshScore;
+  meshScore.hulls_num = score.hulls_num;
+  meshScore.avg_concavity = score.avg_concavity;
+
+  return meshScore;
+
+  }
 }

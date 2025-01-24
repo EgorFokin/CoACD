@@ -23,6 +23,14 @@
 
 namespace coacd
 {
+    struct MeshScore{
+        int hulls_num;
+        double avg_concavity;
+    };
 
     Plane BestCuttingPlane(Model &mesh, Params &params);
+
+    MeshScore ComputeScore(Model &mesh, Params &params);
+
+
 }
