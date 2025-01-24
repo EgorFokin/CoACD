@@ -41,6 +41,10 @@ struct CoACD_MeshArray {
   uint64_t meshes_count;
 };
 
+struct CoACD_Plane {
+  double a, b, c, d;
+};
+
 void COACD_API CoACD_freeMeshArray(CoACD_MeshArray arr);
 
 constexpr int preprocess_auto = 0;
@@ -59,5 +63,16 @@ CoACD_MeshArray COACD_API CoACD_run(CoACD_Mesh const &input, double threshold,
                                     bool extrude, double extrude_margin,
                                     int apx_mode, unsigned int seed);
 
+            
+
 void COACD_API CoACD_setLogLevel(char const *level);
+
+CoACD_Plane COACD_API CoACD_bestCuttingPlane(CoACD_Mesh const &input, double threshold,
+                          int max_convex_hull, int preprocess_mode,
+                          int prep_resolution, int sample_resolution,
+                          int mcts_nodes, int mcts_iteration,
+                          int mcts_max_depth, bool pca, bool merge,
+                          bool decimate, int max_ch_vertex,
+                          bool extrude, double extrude_margin,
+                          int apx_mode, unsigned int seed);
 }
