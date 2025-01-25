@@ -103,7 +103,7 @@ CoACD_MeshScore COACD_API CoACD_meshScore(CoACD_Mesh const &input, double thresh
                           bool extrude, double extrude_margin,
                           int apx_mode, unsigned int seed);
 
-CoACD_Mesh COACD_API CoACD_normalize(CoACD_Mesh const &input);
+CoACD_Mesh COACD_API CoACD_normalize(CoACD_Mesh const &input, bool pca);
 
 
 }

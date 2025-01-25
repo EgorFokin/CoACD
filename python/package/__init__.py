@@ -36,6 +36,19 @@ class CoACD_MeshArray(ctypes.Structure):
         ("meshes_count", c_uint64),
     ]
 
+class CoACD_Plane(Structure):
+    _fields_ = [
+        ("a", c_double),
+        ("b", c_double),
+        ("c", c_double),
+        ("d", c_double),
+    ]
+
+class CoACD_MeshScore(Structure):
+    _fields_ = [
+        ("hulls_num", c_int),
+        ("avg_concavity", c_double),
+    ]
 
 _lib.CoACD_setLogLevel.argtypes = [c_char_p]
 _lib.CoACD_setLogLevel.restype = None
@@ -63,6 +76,53 @@ _lib.CoACD_run.argtypes = [
     c_uint,
 ]
 _lib.CoACD_run.restype = CoACD_MeshArray
+
+_lib.CoACD_bestCuttingPlane.argtypes = [
+    POINTER(CoACD_Mesh),
+    c_double,
+    c_int,
+    c_int,
+    c_int,
+    c_int,
+    c_int,
+    c_int,
+    c_int,
+    c_bool,
+    c_bool,
+    c_bool,
+    c_int,
+    c_bool,
+    c_double,
+    c_int,
+    c_uint,
+]
+_lib.CoACD_bestCuttingPlane.restype = CoACD_Plane
+
+_lib.CoACD_meshScore.argtypes = [
+    POINTER(CoACD_Mesh),
+    c_double,
+    c_int,
+    c_int,
+    c_int,
+    c_int,
+    c_int,
+    c_int,
+    c_int,
+    c_bool,
+    c_bool,
+    c_bool,
+    c_int,
+    c_bool,
+    c_double,
+    c_int,
+    c_uint,
+]
+_lib.CoACD_meshScore.restype = CoACD_MeshScore
+
+_lib.CoACD_normalize.argtypes = [
+    POINTER(CoACD_Mesh),
+]
+_lib.CoACD_normalize.restype = CoACD_Mesh
 
 
 class Mesh:
@@ -164,22 +224,201 @@ def set_log_level(level: str):
     level = level.encode("utf-8")
     _lib.CoACD_setLogLevel(level)
 
+def best_cutting_plane(
+        mesh: Mesh,
+        threshold: float = 0.05,
+        max_convex_hull: int = -1,
+        preprocess_mode: str = "auto",
+        preprocess_resolution: int = 30,
+        resolution: int = 2000,
+        mcts_nodes: int = 20,
+        mcts_iterations: int = 150,
+        mcts_max_depth: int = 3,
+        pca: int = False,
+        merge: bool = True,
+        decimate: bool = False,
+        max_ch_vertex: int = 256,
+        extrude: bool = False,
+        extrude_margin: float = 0.01,
+        apx_mode: str = "ch",
+        seed: int = 0,):
+    vertices = np.ascontiguousarray(mesh.vertices, dtype=np.double)
+    indices = np.ascontiguousarray(mesh.indices, dtype=np.int32)
+    assert len(vertices.shape) == 2 and vertices.shape[1] == 3
+    assert len(indices.shape) == 2 and indices.shape[1] == 3
+
+    mesh = CoACD_Mesh()
+
+    mesh.vertices_ptr = ctypes.cast(
+        vertices.__array_interface__["data"][0], POINTER(c_double)
+    )
+    mesh.vertices_count = vertices.shape[0]
+
+    mesh.triangles_ptr = ctypes.cast(
+        indices.__array_interface__["data"][0], POINTER(c_int)
+    )
+    mesh.triangles_count = indices.shape[0]
+
+    if preprocess_mode == "on":
+        pm = 1
+    elif preprocess_mode == "off":
+        pm = 2
+    else:
+        pm = 0
+
+    if apx_mode == "ch":
+        apx = 0
+    elif apx_mode == "box":
+        apx = 1
+
+    plane = _lib.CoACD_bestCuttingPlane(
+        mesh,
+        threshold,
+        max_convex_hull,
+        pm,
+        preprocess_resolution,
+        resolution,
+        mcts_nodes,
+        mcts_iterations,
+        mcts_max_depth,
+        pca,
+        merge,
+        decimate,
+        max_ch_vertex,
+        extrude,
+        extrude_margin,
+        apx,
+        seed,
+    )
+
+    return plane
+
+
+def mesh_score(mesh: Mesh,
+        threshold: float = 0.05,
+        max_convex_hull: int = -1,
+        preprocess_mode: str = "auto",
+        preprocess_resolution: int = 30,
+        resolution: int = 2000,
+        mcts_nodes: int = 20,
+        mcts_iterations: int = 150,
+        mcts_max_depth: int = 3,
+        pca: int = False,
+        merge: bool = True,
+        decimate: bool = False,
+        max_ch_vertex: int = 256,
+        extrude: bool = False,
+        extrude_margin: float = 0.01,
+        apx_mode: str = "ch",
+        seed: int = 0,):
+    vertices = np.ascontiguousarray(mesh.vertices, dtype=np.double)
+    indices = np.ascontiguousarray(mesh.indices, dtype=np.int32)
+    assert len(vertices.shape) == 2 and vertices.shape[1] == 3
+    assert len(indices.shape) == 2 and indices.shape[1] == 3
+
+    mesh = CoACD_Mesh()
+
+    mesh.vertices_ptr = ctypes.cast(
+        vertices.__array_interface__["data"][0], POINTER(c_double)
+    )
+    mesh.vertices_count = vertices.shape[0]
+
+    mesh.triangles_ptr = ctypes.cast(
+        indices.__array_interface__["data"][0], POINTER(c_int)
+    )
+    mesh.triangles_count = indices.shape[0]
+
+    if preprocess_mode == "on":
+        pm = 1
+    elif preprocess_mode == "off":
+        pm = 2
+    else:
+        pm = 0
+
+    if apx_mode == "ch":
+        apx = 0
+    elif apx_mode == "box":
+        apx = 1
+
+    score = _lib.CoACD_meshScore(
+        mesh,
+        threshold,
+        max_convex_hull,
+        pm,
+        preprocess_resolution,
+        resolution,
+        mcts_nodes,
+        mcts_iterations,
+        mcts_max_depth,
+        pca,
+        merge,
+        decimate,
+        max_ch_vertex,
+        extrude,
+        extrude_margin,
+        apx,
+        seed,
+    )
+
+    return score
+    
+
+def normalize(mesh: Mesh, pca: bool = False):
+    vertices = np.ascontiguousarray(mesh.vertices, dtype=np.double)
+    indices = np.ascontiguousarray(mesh.indices, dtype=np.int32)
+    assert len(vertices.shape) == 2 and vertices.shape[1] == 3
+    assert len(indices.shape) == 2 and indices.shape[1] == 3
+
+    mesh = CoACD_Mesh()
+
+    mesh.vertices_ptr = ctypes.cast(
+        vertices.__array_interface__["data"][0], POINTER(c_double)
+    )
+    mesh.vertices_count = vertices.shape[0]
+
+    mesh.triangles_ptr = ctypes.cast(
+        indices.__array_interface__["data"][0], POINTER(c_int)
+    )
+    mesh.triangles_count = indices.shape[0]
+
+    mesh = _lib.CoACD_normalize(mesh,pca)
+
+    vertices = np.ctypeslib.as_array(
+        mesh.vertices_ptr, (mesh.vertices_count, 3)
+    ).copy()
+    indices = np.ctypeslib.as_array(
+        mesh.triangles_ptr, (mesh.triangles_count, 3)
+    ).copy()
+
+    return Mesh(vertices, indices)
+
 
 if __name__ == "__main__":
     import trimesh
 
     set_log_level("info")
 
-    mesh = trimesh.load("out.obj")
+    mesh = trimesh.load("fandisk.obj")
     mesh = Mesh(mesh.vertices, mesh.faces)
-    result = run_coacd(mesh)
-    mesh_parts = []
-    for vs, fs in result:
-        mesh_parts.append(trimesh.Trimesh(vs, fs))
+    # result = run_coacd(mesh)
+    # mesh_parts = []
+    # for vs, fs in result:
+    #     mesh_parts.append(trimesh.Trimesh(vs, fs))
 
+    # scene = trimesh.Scene()
+    # np.random.seed(0)
+    # for p in mesh_parts:
+    #     p.visual.vertex_colors[:, :3] = (np.random.rand(3) * 255).astype(np.uint8)
+    #     scene.add_geometry(p)
+    # scene.export("decomposed.obj")
+
+    normilized_mesh = normalize(mesh,pca=True)
     scene = trimesh.Scene()
-    np.random.seed(0)
-    for p in mesh_parts:
-        p.visual.vertex_colors[:, :3] = (np.random.rand(3) * 255).astype(np.uint8)
-        scene.add_geometry(p)
-    scene.export("decomposed.obj")
+    scene.add_geometry(trimesh.Trimesh(normilized_mesh.vertices, normilized_mesh.indices))
+    scene.export("normalized.obj")
+
+    plane = best_cutting_plane(mesh,merge=False,pca=True)
+    print(plane.a, plane.b, plane.c, plane.d)
+
+    # score = mesh_score(mesh)
+    # print(score.hulls_num, score.avg_concavity)

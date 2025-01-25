@@ -442,7 +442,7 @@ CoACD_MeshScore CoACD_meshScore(CoACD_Mesh const &input, double threshold,
 
   }
 
-  CoACD_Mesh CoACD_normalize(CoACD_Mesh const &input){
+  CoACD_Mesh CoACD_normalize(CoACD_Mesh const &input, bool pca){
     coacd::Mesh mesh;
     for (uint64_t i = 0; i < input.vertices_count; ++i) {
       mesh.vertices.push_back({input.vertices_ptr[3 * i],
@@ -455,10 +455,19 @@ CoACD_MeshScore CoACD_meshScore(CoACD_Mesh const &input, double threshold,
                               input.triangles_ptr[3 * i + 2]});
     }
 
+    array<array<double, 3>, 3> rot{
+      {{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}}};
+
     coacd::Model m;
     m.Load(mesh.vertices, mesh.indices);
     m.Normalize();
+
+    if (pca) {
+      rot = m.PCA();
+    }
+
     mesh.vertices = m.points;
+    
 
     CoACD_Mesh result;
     result.vertices_ptr = new double[mesh.vertices.size() * 3];
