@@ -4,6 +4,15 @@
 #include <string_view>
 #include <vector>
 
+struct CoACD_Plane {
+  double a, b, c, d;
+};
+
+struct CoACD_MeshScore {
+  int hulls_num;
+  double avg_concavity;
+};
+
 namespace coacd {
 
 #if _WIN32
@@ -17,6 +26,9 @@ struct Mesh {
   std::vector<std::array<int, 3>> indices;
 };
 
+
+
+
 std::vector<Mesh> CoACD(Mesh const &input, double threshold = 0.05,
                         int max_convex_hull = -1, std::string preprocess = "auto",
                         int prep_resolution = 50, int sample_resolution = 2000,
@@ -24,6 +36,13 @@ std::vector<Mesh> CoACD(Mesh const &input, double threshold = 0.05,
                         int mcts_max_depth = 3, bool pca = false,
                         bool merge = true, std::string apx_mode = "ch", unsigned int seed = 0);
 void set_log_level(std::string_view level);
+
+CoACD_Plane run_best_cutting_plane(Mesh const &input, double threshold = 0.05,
+                        int max_convex_hull = -1, std::string preprocess = "auto",
+                        int prep_resolution = 50, int sample_resolution = 2000,
+                        int mcts_nodes = 20, int mcts_iteration = 150,
+                        int mcts_max_depth = 3, bool pca = false,
+                        bool merge = true, std::string apx_mode = "ch", unsigned int seed = 0);
 
 } // namespace coacd
 
@@ -41,14 +60,8 @@ struct CoACD_MeshArray {
   uint64_t meshes_count;
 };
 
-struct CoACD_Plane {
-  double a, b, c, d;
-};
 
-struct COACD_MeshScore {
-  int hulls_num;
-  double avg_concavity;
-};
+
 
 void COACD_API CoACD_freeMeshArray(CoACD_MeshArray arr);
 
@@ -81,7 +94,7 @@ CoACD_Plane COACD_API CoACD_bestCuttingPlane(CoACD_Mesh const &input, double thr
                           bool extrude, double extrude_margin,
                           int apx_mode, unsigned int seed);
 
-COACD_MeshScore COACD_API CoACD_meshScore(CoACD_Mesh const &input, double threshold,
+CoACD_MeshScore COACD_API CoACD_meshScore(CoACD_Mesh const &input, double threshold,
                           int max_convex_hull, int preprocess_mode,
                           int prep_resolution, int sample_resolution,
                           int mcts_nodes, int mcts_iteration,
@@ -90,4 +103,8 @@ COACD_MeshScore COACD_API CoACD_meshScore(CoACD_Mesh const &input, double thresh
                           bool extrude, double extrude_margin,
                           int apx_mode, unsigned int seed);
 
+CoACD_Mesh COACD_API CoACD_normalize(CoACD_Mesh const &input);
+
+
 }
+

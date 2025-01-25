@@ -118,6 +118,150 @@ void set_log_level(std::string_view level) {
   }
 }
 
+CoACD_Plane run_best_cutting_plane(Mesh const &input, double threshold,
+                      int max_convex_hull, std::string preprocess_mode,
+                      int prep_resolution, int sample_resolution,
+                      int mcts_nodes, int mcts_iteration, int mcts_max_depth,
+                      bool pca, bool merge, bool decimate, int max_ch_vertex,
+                      bool extrude, double extrude_margin,
+                      std::string apx_mode, unsigned int seed){
+
+  if (threshold < 0.01) {
+    throw std::runtime_error("CoACD threshold < 0.01 (should be 0.01-1).");
+  } else if (threshold > 1) {
+    throw std::runtime_error("CoACD threshold > 1 (should be 0.01-1).");
+  }
+
+  if (prep_resolution > 1000) {
+    throw std::runtime_error("CoACD prep resolution > 1000, this is probably a "
+                              "bug (should be 30-100).");
+  } else if (prep_resolution < 5) {
+    throw std::runtime_error("CoACD prep resolution < 5, this is probably a "
+                              "bug (should be 20-100).");
+  }
+
+  Params params;
+  params.input_model = "";
+  params.output_name = "";
+  params.threshold = threshold;
+  params.max_convex_hull = max_convex_hull;
+  params.preprocess_mode = preprocess_mode;
+  params.prep_resolution = prep_resolution;
+  params.resolution = sample_resolution;
+  params.mcts_nodes = mcts_nodes;
+  params.mcts_iteration = mcts_iteration;
+  params.mcts_max_depth = mcts_max_depth;
+  params.pca = pca;
+  params.merge = merge;
+  params.decimate = decimate;
+  params.max_ch_vertex = max_ch_vertex;
+  params.extrude = extrude;
+  params.extrude_margin = extrude_margin;
+  params.apx_mode = apx_mode;
+  params.seed = seed;
+
+  Model m;
+  m.Load(input.vertices, input.indices);
+  vector<double> bbox = m.Normalize();
+  array<array<double, 3>, 3> rot{
+      {{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}}};
+
+  if (params.preprocess_mode == std::string("auto")) {
+    bool is_manifold = IsManifold(m);
+    logger::info("Mesh Manifoldness: {}", is_manifold);
+    if (!is_manifold)
+      ManifoldPreprocess(params, m);
+  } else if (params.preprocess_mode == std::string("on")) {
+    ManifoldPreprocess(params, m);
+  }
+
+  if (pca) {
+    rot = m.PCA();
+  }
+
+  coacd::Plane bestplane = BestCuttingPlane(m, params);
+
+  CoACD_Plane plane;
+  plane.a = bestplane.a;
+  plane.b = bestplane.b;
+  plane.c = bestplane.c;
+  plane.d = bestplane.d;
+
+
+  return plane;
+}
+
+CoACD_MeshScore run_mesh_score(Mesh const &input, double threshold,
+                      int max_convex_hull, std::string preprocess_mode,
+                      int prep_resolution, int sample_resolution,
+                      int mcts_nodes, int mcts_iteration, int mcts_max_depth,
+                      bool pca, bool merge, bool decimate, int max_ch_vertex,
+                      bool extrude, double extrude_margin,
+                      std::string apx_mode, unsigned int seed){
+
+  if (threshold < 0.01) {
+    throw std::runtime_error("CoACD threshold < 0.01 (should be 0.01-1).");
+  } else if (threshold > 1) {
+    throw std::runtime_error("CoACD threshold > 1 (should be 0.01-1).");
+  }
+
+  if (prep_resolution > 1000) {
+    throw std::runtime_error("CoACD prep resolution > 1000, this is probably a "
+                              "bug (should be 30-100).");
+  } else if (prep_resolution < 5) {
+    throw std::runtime_error("CoACD prep resolution < 5, this is probably a "
+                              "bug (should be 20-100).");
+  }
+
+  Params params;
+  params.input_model = "";
+  params.output_name = "";
+  params.threshold = threshold;
+  params.max_convex_hull = max_convex_hull;
+  params.preprocess_mode = preprocess_mode;
+  params.prep_resolution = prep_resolution;
+  params.resolution = sample_resolution;
+  params.mcts_nodes = mcts_nodes;
+  params.mcts_iteration = mcts_iteration;
+  params.mcts_max_depth = mcts_max_depth;
+  params.pca = pca;
+  params.merge = merge;
+  params.decimate = decimate;
+  params.max_ch_vertex = max_ch_vertex;
+  params.extrude = extrude;
+  params.extrude_margin = extrude_margin;
+  params.apx_mode = apx_mode;
+  params.seed = seed;
+
+  Model m;
+  m.Load(input.vertices, input.indices);
+  vector<double> bbox = m.Normalize();
+  array<array<double, 3>, 3> rot{
+      {{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}}};
+
+  if (params.preprocess_mode == std::string("auto")) {
+    bool is_manifold = IsManifold(m);
+    logger::info("Mesh Manifoldness: {}", is_manifold);
+    if (!is_manifold)
+      ManifoldPreprocess(params, m);
+  } else if (params.preprocess_mode == std::string("on")) {
+    ManifoldPreprocess(params, m);
+  }
+
+  if (pca) {
+    rot = m.PCA();
+  }
+
+  coacd::MeshScore score = ComputeScore(m, params);
+
+  CoACD_MeshScore mesh_score;
+  mesh_score.hulls_num = score.hulls_num;
+  mesh_score.avg_concavity = score.avg_concavity;
+
+
+  return mesh_score;
+}
+
 } // namespace coacd
 
 extern "C" {
@@ -241,56 +385,18 @@ CoACD_Plane CoACD_bestCuttingPlane(CoACD_Mesh const &input, double threshold,
     throw std::runtime_error("invalid approximation mode " + std::to_string(apx_mode));
   }
 
-  coacd::Params params;
-  params.input_model = "";
-  params.output_name = "";
-  params.threshold = threshold;
-  params.max_convex_hull = max_convex_hull;
-  params.preprocess_mode = preprocess_mode;
-  params.prep_resolution = prep_resolution;
-  params.resolution = sample_resolution;
-  params.mcts_nodes = mcts_nodes;
-  params.mcts_iteration = mcts_iteration;
-  params.mcts_max_depth = mcts_max_depth;
-  params.pca = pca;
-  params.merge = merge;
-  params.decimate = decimate;
-  params.max_ch_vertex = max_ch_vertex;
-  params.extrude = extrude;
-  params.extrude_margin = extrude_margin;
-  params.apx_mode = apx_mode;
-  params.seed = seed;
+  CoACD_Plane bestplane = coacd::run_best_cutting_plane(mesh, threshold, max_convex_hull, pm,
+                             prep_resolution, sample_resolution, mcts_nodes,
+                             mcts_iteration, mcts_max_depth, pca, merge, decimate, max_ch_vertex, 
+                             extrude, extrude_margin, apx, seed);
+  
+  
+  return bestplane;
 
-  coacd::Model m;
-  m.Load(mesh.vertices, mesh.indices);
-  vector<double> bbox = m.Normalize();
-  array<array<double, 3>, 3> rot{
-      {{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}}};
-
-  if (params.preprocess_mode == std::string("auto")) {
-    bool is_manifold = IsManifold(m);
-    if (!is_manifold)
-      ManifoldPreprocess(params, m);
-  } else if (params.preprocess_mode == std::string("on")) {
-    ManifoldPreprocess(params, m);
-  }
-
-  if (pca) {
-    rot = m.PCA();
-  }
-
-  coacd::Plane bestplane = coacd::BestCuttingPlane(m, params);
-
-  CoACD_Plane plane;
-  plane.a = bestplane.a;
-  plane.b = bestplane.b;
-  plane.c = bestplane.c;
-  plane.d = bestplane.d;
-
-  return plane;
 }
 
-COACD_MeshScore CoACD_meshScore(CoACD_Mesh const &input, double threshold,
+
+CoACD_MeshScore CoACD_meshScore(CoACD_Mesh const &input, double threshold,
                           int max_convex_hull, int preprocess_mode,
                           int prep_resolution, int sample_resolution,
                           int mcts_nodes, int mcts_iteration,
@@ -327,51 +433,49 @@ COACD_MeshScore CoACD_meshScore(CoACD_Mesh const &input, double threshold,
     throw std::runtime_error("invalid approximation mode " + std::to_string(apx_mode));
   }
 
-  coacd::Params params;
-  params.input_model = "";
-  params.output_name = "";
-  params.threshold = threshold;
-  params.max_convex_hull = max_convex_hull;
-  params.preprocess_mode = preprocess_mode;
-  params.prep_resolution = prep_resolution;
-  params.resolution = sample_resolution;
-  params.mcts_nodes = mcts_nodes;
-  params.mcts_iteration = mcts_iteration;
-  params.mcts_max_depth = mcts_max_depth;
-  params.pca = pca;
-  params.merge = merge;
-  params.decimate = decimate;
-  params.max_ch_vertex = max_ch_vertex;
-  params.extrude = extrude;
-  params.extrude_margin = extrude_margin;
-  params.apx_mode = apx_mode;
-  params.seed = seed;
-
-  coacd::Model m;
-  m.Load(mesh.vertices, mesh.indices);
-  vector<double> bbox = m.Normalize();
-  array<array<double, 3>, 3> rot{
-      {{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}}};
-
-  if (params.preprocess_mode == std::string("auto")) {
-    bool is_manifold = IsManifold(m);
-    if (!is_manifold)
-      ManifoldPreprocess(params, m);
-  } else if (params.preprocess_mode == std::string("on")) {
-    ManifoldPreprocess(params, m);
-  }
-
-  if (pca) {
-    rot = m.PCA();
-  }
-
-  coacd::MeshScore score = coacd::ComputeScore(m, params);
-
-  COACD_MeshScore meshScore;
-  meshScore.hulls_num = score.hulls_num;
-  meshScore.avg_concavity = score.avg_concavity;
-
+  CoACD_MeshScore meshScore = coacd::run_mesh_score(mesh, threshold, max_convex_hull, pm,
+                             prep_resolution, sample_resolution, mcts_nodes,
+                             mcts_iteration, mcts_max_depth, pca, merge, decimate, max_ch_vertex, 
+                             extrude, extrude_margin, apx, seed);
+  
   return meshScore;
 
+  }
+
+  CoACD_Mesh CoACD_normalize(CoACD_Mesh const &input){
+    coacd::Mesh mesh;
+    for (uint64_t i = 0; i < input.vertices_count; ++i) {
+      mesh.vertices.push_back({input.vertices_ptr[3 * i],
+                              input.vertices_ptr[3 * i + 1],
+                              input.vertices_ptr[3 * i + 2]});
+    }
+    for (uint64_t i = 0; i < input.triangles_count; ++i) {
+      mesh.indices.push_back({input.triangles_ptr[3 * i],
+                              input.triangles_ptr[3 * i + 1],
+                              input.triangles_ptr[3 * i + 2]});
+    }
+
+    coacd::Model m;
+    m.Load(mesh.vertices, mesh.indices);
+    m.Normalize();
+    mesh.vertices = m.points;
+
+    CoACD_Mesh result;
+    result.vertices_ptr = new double[mesh.vertices.size() * 3];
+    result.vertices_count = mesh.vertices.size();
+    for (size_t j = 0; j < mesh.vertices.size(); ++j) {
+      result.vertices_ptr[3 * j] = mesh.vertices[j][0];
+      result.vertices_ptr[3 * j + 1] = mesh.vertices[j][1];
+      result.vertices_ptr[3 * j + 2] = mesh.vertices[j][2];
+    }
+    result.triangles_ptr = new int[mesh.indices.size() * 3];
+    result.triangles_count = mesh.indices.size();
+    for (size_t j = 0; j < mesh.indices.size(); ++j) {
+      result.triangles_ptr[3 * j] = mesh.indices[j][0];
+      result.triangles_ptr[3 * j + 1] = mesh.indices[j][1];
+      result.triangles_ptr[3 * j + 2] = mesh.indices[j][2];
+    }
+
+    return result;
   }
 }
