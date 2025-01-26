@@ -8,3 +8,4 @@ coacd.egg-info/*
 *ply
 *DS_Store
 vscode/*
+coacd_modified.egg-info/*
