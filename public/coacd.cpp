@@ -487,4 +487,63 @@ CoACD_MeshScore CoACD_meshScore(CoACD_Mesh const &input, double threshold,
 
     return result;
   }
+
+  CoACD_MeshArray CoACD_clip(CoACD_Mesh const &input, CoACD_Plane const &plane){
+    coacd::Mesh mesh;
+    for (uint64_t i = 0; i < input.vertices_count; ++i) {
+      mesh.vertices.push_back({input.vertices_ptr[3 * i],
+                              input.vertices_ptr[3 * i + 1],
+                              input.vertices_ptr[3 * i + 2]});
+    }
+    for (uint64_t i = 0; i < input.triangles_count; ++i) {
+      mesh.indices.push_back({input.triangles_ptr[3 * i],
+                              input.triangles_ptr[3 * i + 1],
+                              input.triangles_ptr[3 * i + 2]});
+    }
+
+    coacd::Plane p;
+    p.a = plane.a;
+    p.b = plane.b;
+    p.c = plane.c;
+    p.d = plane.d;
+
+    coacd::Model m,pos,neg;
+    m.Load(mesh.vertices, mesh.indices);
+    double cut_area;
+    bool flag = coacd::Clip(m,pos,neg, p, cut_area);
+
+    CoACD_MeshArray arr;
+
+    if (!flag) {
+      arr.meshes_count = 0;
+      arr.meshes_ptr = nullptr;
+      return arr;
+    }
+
+    arr.meshes_ptr = new CoACD_Mesh[2];
+    arr.meshes_count = 2;
+
+    for (int i = 0; i < 2; i++) {
+      coacd::Model *part = (i == 0) ? &pos : &neg;
+      mesh.vertices = part->points;
+      mesh.indices = part->triangles;
+
+      arr.meshes_ptr[i].vertices_ptr = new double[mesh.vertices.size() * 3];
+      arr.meshes_ptr[i].vertices_count = mesh.vertices.size();
+      for (size_t j = 0; j < mesh.vertices.size(); ++j) {
+        arr.meshes_ptr[i].vertices_ptr[3 * j] = mesh.vertices[j][0];
+        arr.meshes_ptr[i].vertices_ptr[3 * j + 1] = mesh.vertices[j][1];
+        arr.meshes_ptr[i].vertices_ptr[3 * j + 2] = mesh.vertices[j][2];
+      }
+      arr.meshes_ptr[i].triangles_ptr = new int[mesh.indices.size() * 3];
+      arr.meshes_ptr[i].triangles_count = mesh.indices.size();
+      for (size_t j = 0; j < mesh.indices.size(); ++j) {
+        arr.meshes_ptr[i].triangles_ptr[3 * j] = mesh.indices[j][0];
+        arr.meshes_ptr[i].triangles_ptr[3 * j + 1] = mesh.indices[j][1];
+        arr.meshes_ptr[i].triangles_ptr[3 * j + 2] = mesh.indices[j][2];
+      }
+    }
+
+    return arr;
+  }
 }

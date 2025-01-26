@@ -105,6 +105,8 @@ CoACD_MeshScore COACD_API CoACD_meshScore(CoACD_Mesh const &input, double thresh
 
 CoACD_Mesh COACD_API CoACD_normalize(CoACD_Mesh const &input, bool pca);
 
+CoACD_MeshArray COACD_API CoACD_clip(CoACD_Mesh const &input, CoACD_Plane const &plane);
+
 
 }
 

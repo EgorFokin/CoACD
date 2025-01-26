@@ -124,6 +124,13 @@ _lib.CoACD_normalize.argtypes = [
 ]
 _lib.CoACD_normalize.restype = CoACD_Mesh
 
+_lib.CoACD_clip.argtypes = [
+    POINTER(CoACD_Mesh),
+    POINTER(CoACD_Plane),
+]
+
+_lib.CoACD_clip.restype = CoACD_MeshArray
+
 
 class Mesh:
     def __init__(
@@ -392,6 +399,39 @@ def normalize(mesh: Mesh, pca: bool = False):
 
     return Mesh(vertices, indices)
 
+def clip(mesh: Mesh, plane: CoACD_Plane):
+    vertices = np.ascontiguousarray(mesh.vertices, dtype=np.double)
+    indices = np.ascontiguousarray(mesh.indices, dtype=np.int32)
+    assert len(vertices.shape) == 2 and vertices.shape[1] == 3
+    assert len(indices.shape) == 2 and indices.shape[1] == 3
+
+    mesh = CoACD_Mesh()
+
+    mesh.vertices_ptr = ctypes.cast(
+        vertices.__array_interface__["data"][0], POINTER(c_double)
+    )
+    mesh.vertices_count = vertices.shape[0]
+
+    mesh.triangles_ptr = ctypes.cast(
+        indices.__array_interface__["data"][0], POINTER(c_int)
+    )
+    mesh.triangles_count = indices.shape[0]
+
+    mesh_array = _lib.CoACD_clip(mesh,plane)
+
+    meshes = []
+    for i in range(mesh_array.meshes_count):
+        mesh = mesh_array.meshes_ptr[i]
+        vertices = np.ctypeslib.as_array(
+            mesh.vertices_ptr, (mesh.vertices_count, 3)
+        ).copy()
+        indices = np.ctypeslib.as_array(
+            mesh.triangles_ptr, (mesh.triangles_count, 3)
+        ).copy()
+        meshes.append([vertices, indices])
+
+    _lib.CoACD_freeMeshArray(mesh_array)
+    return meshes
 
 if __name__ == "__main__":
     import trimesh
@@ -419,6 +459,19 @@ if __name__ == "__main__":
 
     plane = best_cutting_plane(mesh,merge=False,pca=True)
     print(plane.a, plane.b, plane.c, plane.d)
+
+    result = clip(mesh,plane)
+    mesh_parts = []
+    for vs, fs in result:
+        mesh_parts.append(trimesh.Trimesh(vs, fs))
+
+    scene = trimesh.Scene()
+    np.random.seed(0)
+    for p in mesh_parts:
+        p.visual.vertex_colors[:, :3] = (np.random.rand(3) * 255).astype(np.uint8)
+        scene.add_geometry(p)
+    scene.export("decomposed.obj")
+    
 
     # score = mesh_score(mesh)
     # print(score.hulls_num, score.avg_concavity)
