@@ -118,13 +118,13 @@ void set_log_level(std::string_view level) {
   }
 }
 
-CoACD_Plane run_best_cutting_plane(Mesh const &input, double threshold,
+vector<CoACD_Plane>  run_best_cutting_planes(Mesh const &input, double threshold,
                       int max_convex_hull, std::string preprocess_mode,
                       int prep_resolution, int sample_resolution,
                       int mcts_nodes, int mcts_iteration, int mcts_max_depth,
                       bool pca, bool merge, bool decimate, int max_ch_vertex,
                       bool extrude, double extrude_margin,
-                      std::string apx_mode, unsigned int seed){
+                      std::string apx_mode, unsigned int seed, int num_planes){
 
   if (threshold < 0.01) {
     throw std::runtime_error("CoACD threshold < 0.01 (should be 0.01-1).");
@@ -179,16 +179,16 @@ CoACD_Plane run_best_cutting_plane(Mesh const &input, double threshold,
     rot = m.PCA();
   }
 
-  coacd::Plane bestplane = BestCuttingPlane(m, params);
-
-  CoACD_Plane plane;
-  plane.a = bestplane.a;
-  plane.b = bestplane.b;
-  plane.c = bestplane.c;
-  plane.d = bestplane.d;
+  vector<pair<coacd::Plane,double>> bestplanes = BestCuttingPlanes(m, params, num_planes);
 
 
-  return plane;
+  vector<CoACD_Plane> planes;
+  for (auto &p : bestplanes) {
+    planes.push_back(CoACD_Plane{.a = p.first.a, .b = p.first.b, .c = p.first.c, .d = p.first.d, .score = p.second});
+  }
+
+
+  return planes;
 }
 
 CoACD_MeshScore run_mesh_score(Mesh const &input, double threshold,
@@ -348,14 +348,14 @@ void CoACD_setLogLevel(char const *level) {
   coacd::set_log_level(std::string_view(level));
 }
 
-CoACD_Plane CoACD_bestCuttingPlane(CoACD_Mesh const &input, double threshold,
+CoACD_PlaneArray CoACD_bestCuttingPlanes(CoACD_Mesh const &input, double threshold,
                           int max_convex_hull, int preprocess_mode,
                           int prep_resolution, int sample_resolution,
                           int mcts_nodes, int mcts_iteration,
                           int mcts_max_depth, bool pca, bool merge,
                           bool decimate, int max_ch_vertex,
                           bool extrude, double extrude_margin,
-                          int apx_mode, unsigned int seed){
+                          int apx_mode, unsigned int seed, int num_planes){
   coacd::Mesh mesh;
   for (uint64_t i = 0; i < input.vertices_count; ++i) {
     mesh.vertices.push_back({input.vertices_ptr[3 * i],
@@ -385,16 +385,32 @@ CoACD_Plane CoACD_bestCuttingPlane(CoACD_Mesh const &input, double threshold,
     throw std::runtime_error("invalid approximation mode " + std::to_string(apx_mode));
   }
 
-  CoACD_Plane bestplane = coacd::run_best_cutting_plane(mesh, threshold, max_convex_hull, pm,
+  vector<CoACD_Plane> bestplanes = coacd::run_best_cutting_planes(mesh, threshold, max_convex_hull, pm,
                              prep_resolution, sample_resolution, mcts_nodes,
                              mcts_iteration, mcts_max_depth, pca, merge, decimate, max_ch_vertex, 
-                             extrude, extrude_margin, apx, seed);
+                             extrude, extrude_margin, apx, seed, num_planes);
   
+  CoACD_PlaneArray planes;
+  planes.planes_ptr = new CoACD_Plane[bestplanes.size()];
+  planes.planes_count = bestplanes.size();
+
+  for (size_t i = 0; i < bestplanes.size(); ++i) {
+    planes.planes_ptr[i].a = bestplanes[i].a;
+    planes.planes_ptr[i].b = bestplanes[i].b;
+    planes.planes_ptr[i].c = bestplanes[i].c;
+    planes.planes_ptr[i].d = bestplanes[i].d;
+    planes.planes_ptr[i].score = bestplanes[i].score;
+  }
   
-  return bestplane;
+  return planes;
 
 }
 
+void CoACD_freePlaneArray(CoACD_PlaneArray arr) {
+  delete[] arr.planes_ptr;
+  arr.planes_ptr = nullptr;
+  arr.planes_count = 0;
+}
 
 CoACD_MeshScore CoACD_meshScore(CoACD_Mesh const &input, double threshold,
                           int max_convex_hull, int preprocess_mode,

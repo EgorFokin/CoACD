@@ -28,7 +28,7 @@ namespace coacd
         double avg_concavity;
     };
 
-    Plane BestCuttingPlane(Model &mesh, Params &params);
+    vector<pair<Plane,double>> BestCuttingPlanes(Model &mesh, Params &params, int num_planes = 1);
 
     MeshScore ComputeScore(Model &mesh, Params &params);
 

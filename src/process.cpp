@@ -474,9 +474,9 @@ namespace coacd
                     {
                         bestplane = best_next_node->state->current_value.first;
                         TernaryMCTS(pmesh, params, bestplane, best_path, best_next_node->quality_value); // using Rv to Ternary refine
+                        
+                        logger::info(" - plane {},{},{},{},{}",bestplane.a,bestplane.b,bestplane.c,bestplane.d, best_next_node->quality_value);
                         free_tree(node, 0);
-                        logger::info(" - plane {},{},{},{}",bestplane.a,bestplane.b,bestplane.c,bestplane.d);
-
                         Model pos, neg;
                         bool clipf = Clip(pmesh, pos, neg, bestplane, cut_area);
                         if (!clipf)

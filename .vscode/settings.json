@@ -1,0 +1,8 @@
+{
+  "files.associations": {
+    "vector": "cpp",
+    "utility": "cpp",
+    "random": "cpp",
+    "*.ipp": "cpp"
+  }
+}

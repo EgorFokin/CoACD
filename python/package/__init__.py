@@ -21,6 +21,7 @@ for _file in _lib_files:
         _lib = ctypes.CDLL(os.path.join(os.path.dirname(os.path.abspath(__file__)), _file))
 
 
+
 class CoACD_Mesh(ctypes.Structure):
     _fields_ = [
         ("vertices_ptr", POINTER(c_double)),
@@ -42,6 +43,13 @@ class CoACD_Plane(Structure):
         ("b", c_double),
         ("c", c_double),
         ("d", c_double),
+        ("score", c_double),
+    ]
+
+class CoACD_PlaneArray(ctypes.Structure):
+    _fields_ = [
+        ("planes_ptr", POINTER(CoACD_Plane)),
+        ("planes_count", c_uint64),
     ]
 
 class CoACD_MeshScore(Structure):
@@ -77,7 +85,7 @@ _lib.CoACD_run.argtypes = [
 ]
 _lib.CoACD_run.restype = CoACD_MeshArray
 
-_lib.CoACD_bestCuttingPlane.argtypes = [
+_lib.CoACD_bestCuttingPlanes.argtypes = [
     POINTER(CoACD_Mesh),
     c_double,
     c_int,
@@ -95,8 +103,12 @@ _lib.CoACD_bestCuttingPlane.argtypes = [
     c_double,
     c_int,
     c_uint,
+    c_int,
 ]
-_lib.CoACD_bestCuttingPlane.restype = CoACD_Plane
+_lib.CoACD_bestCuttingPlanes.restype = CoACD_PlaneArray
+
+_lib.CoACD_freePlaneArray.argtypes = [CoACD_PlaneArray]
+_lib.CoACD_freePlaneArray.restype = None
 
 _lib.CoACD_meshScore.argtypes = [
     POINTER(CoACD_Mesh),
@@ -231,7 +243,7 @@ def set_log_level(level: str):
     level = level.encode("utf-8")
     _lib.CoACD_setLogLevel(level)
 
-def best_cutting_plane(
+def best_cutting_planes(
         mesh: Mesh,
         threshold: float = 0.05,
         max_convex_hull: int = -1,
@@ -248,7 +260,8 @@ def best_cutting_plane(
         extrude: bool = False,
         extrude_margin: float = 0.01,
         apx_mode: str = "ch",
-        seed: int = 0,):
+        seed: int = 0,
+        num_planes: int = 1,):
     vertices = np.ascontiguousarray(mesh.vertices, dtype=np.double)
     indices = np.ascontiguousarray(mesh.indices, dtype=np.int32)
     assert len(vertices.shape) == 2 and vertices.shape[1] == 3
@@ -278,7 +291,7 @@ def best_cutting_plane(
     elif apx_mode == "box":
         apx = 1
 
-    plane = _lib.CoACD_bestCuttingPlane(
+    planes = _lib.CoACD_bestCuttingPlanes(
         mesh,
         threshold,
         max_convex_hull,
@@ -296,9 +309,13 @@ def best_cutting_plane(
         extrude_margin,
         apx,
         seed,
+        num_planes,
     )
 
-    return plane
+    bestplanes = [planes.planes_ptr[i] for i in range(planes.planes_count)]
+    _lib.CoACD_freePlaneArray(planes)
+
+    return bestplanes
 
 
 def mesh_score(mesh: Mesh,
@@ -436,9 +453,9 @@ def clip(mesh: Mesh, plane: CoACD_Plane):
 if __name__ == "__main__":
     import trimesh
 
-    set_log_level("info")
+    set_log_level("debug")
 
-    mesh = trimesh.load("fandisk.obj")
+    mesh = trimesh.load("teapot.obj")
     mesh = Mesh(mesh.vertices, mesh.faces)
     # result = run_coacd(mesh)
     # mesh_parts = []
@@ -452,25 +469,26 @@ if __name__ == "__main__":
     #     scene.add_geometry(p)
     # scene.export("decomposed.obj")
 
-    normilized_mesh = normalize(mesh,pca=True)
+    normilized_mesh = normalize(mesh)
     scene = trimesh.Scene()
     scene.add_geometry(trimesh.Trimesh(normilized_mesh.vertices, normilized_mesh.indices))
     scene.export("normalized.obj")
 
-    plane = best_cutting_plane(mesh,merge=False,pca=True)
-    print(plane.a, plane.b, plane.c, plane.d)
+    planes = best_cutting_planes(mesh,merge=False,num_planes=3)
+    for plane in planes:
+        print(plane.a,plane.b,plane.c,plane.d, plane.score)
 
-    result = clip(mesh,plane)
-    mesh_parts = []
-    for vs, fs in result:
-        mesh_parts.append(trimesh.Trimesh(vs, fs))
+    # result = clip(mesh,plane)
+    # mesh_parts = []
+    # for vs, fs in result:
+    #     mesh_parts.append(trimesh.Trimesh(vs, fs))
 
-    scene = trimesh.Scene()
-    np.random.seed(0)
-    for p in mesh_parts:
-        p.visual.vertex_colors[:, :3] = (np.random.rand(3) * 255).astype(np.uint8)
-        scene.add_geometry(p)
-    scene.export("decomposed.obj")
+    # scene = trimesh.Scene()
+    # np.random.seed(0)
+    # for p in mesh_parts:
+    #     p.visual.vertex_colors[:, :3] = (np.random.rand(3) * 255).astype(np.uint8)
+    #     scene.add_geometry(p)
+    # scene.export("decomposed.obj")
     
 
     # score = mesh_score(mesh)
