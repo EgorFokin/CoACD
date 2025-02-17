@@ -1,0 +1,12 @@
+LICENSE
+README.md
+setup.py
+coacd_modified2.egg-info/PKG-INFO
+coacd_modified2.egg-info/SOURCES.txt
+coacd_modified2.egg-info/dependency_links.txt
+coacd_modified2.egg-info/not-zip-safe
+coacd_modified2.egg-info/requires.txt
+coacd_modified2.egg-info/top_level.txt
+python/package/bin/coacd
+python/package/__init__.py
+python/package/bin/coacd

@@ -68,15 +68,7 @@ namespace coacd
         return best_sub_nodes;
     }
 
-    vector<Plane> get_best_path(Node* node){
-        vector<Plane> best_path;
-        while (node != NULL)
-        {
-            best_path.push_back(node->get_state()->current_value.first);
-            node = node->parent;
-        }
-        return best_path;
-    }
+
 
     vector<pair<Plane,double>> BestCuttingPlanes(Model &mesh, Params &params, int num_planes){
         vector<Model> parts, pmeshs;
@@ -110,7 +102,7 @@ namespace coacd
         for (int i = 0; i < (int)best_nodes.size(); i++)   
         {
             Plane next_best_plane = best_nodes[i].first->state->current_value.first;
-            best_path = get_best_path(best_nodes[i].first);
+
             TernaryMCTS(pmesh, params, next_best_plane, best_path, best_nodes[i].first->quality_value); // using Rv to Ternary refine
             planes.push_back(make_pair(next_best_plane, best_nodes[i].first->quality_value));
         }

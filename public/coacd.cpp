@@ -384,11 +384,20 @@ CoACD_PlaneArray CoACD_bestCuttingPlanes(CoACD_Mesh const &input, double thresho
   } else {
     throw std::runtime_error("invalid approximation mode " + std::to_string(apx_mode));
   }
-
-  vector<CoACD_Plane> bestplanes = coacd::run_best_cutting_planes(mesh, threshold, max_convex_hull, pm,
+  vector<CoACD_Plane> bestplanes;
+  try{
+    bestplanes = coacd::run_best_cutting_planes(mesh, threshold, max_convex_hull, pm,
                              prep_resolution, sample_resolution, mcts_nodes,
                              mcts_iteration, mcts_max_depth, pca, merge, decimate, max_ch_vertex, 
                              extrude, extrude_margin, apx, seed, num_planes);
+  }
+  catch(const std::exception& e){
+    CoACD_PlaneArray arr;
+    arr.planes_count = 0;
+    arr.planes_ptr = nullptr;
+    return arr;
+  };
+  
   
   CoACD_PlaneArray planes;
   planes.planes_ptr = new CoACD_Plane[bestplanes.size()];
