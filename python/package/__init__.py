@@ -46,6 +46,17 @@ class CoACD_Plane(Structure):
         ("score", c_double),
     ]
 
+class CoACD_Normalization(Structure):
+    _fields_ = [
+        ("mesh", CoACD_Mesh),
+        ("xmin", c_double),
+        ("xmax", c_double),
+        ("ymin", c_double),
+        ("ymax", c_double),
+        ("zmin", c_double),
+        ("zmax", c_double),
+    ]
+
 class CoACD_PlaneArray(ctypes.Structure):
     _fields_ = [
         ("planes_ptr", POINTER(CoACD_Plane)),
@@ -56,6 +67,12 @@ class CoACD_MeshScore(Structure):
     _fields_ = [
         ("hulls_num", c_int),
         ("avg_concavity", c_double),
+    ]
+
+class CoACD_ConvexHull(Structure):
+    _fields_ = [
+        ("mesh", CoACD_Mesh),
+        ("concavity", c_double),
     ]
 
 _lib.CoACD_setLogLevel.argtypes = [c_char_p]
@@ -131,10 +148,15 @@ _lib.CoACD_meshScore.argtypes = [
 ]
 _lib.CoACD_meshScore.restype = CoACD_MeshScore
 
+_lib.CoACD_freeMesh.argtypes = [POINTER
+    (CoACD_Mesh)]
+_lib.CoACD_freeMesh.restype = None
+
+
 _lib.CoACD_normalize.argtypes = [
     POINTER(CoACD_Mesh),
 ]
-_lib.CoACD_normalize.restype = CoACD_Mesh
+_lib.CoACD_normalize.restype = CoACD_Normalization
 
 _lib.CoACD_clip.argtypes = [
     POINTER(CoACD_Mesh),
@@ -142,6 +164,20 @@ _lib.CoACD_clip.argtypes = [
 ]
 
 _lib.CoACD_clip.restype = CoACD_MeshArray
+
+_lib.CoACD_compute_convex_hull.argtypes = [
+    POINTER(CoACD_Mesh),
+]
+
+_lib.CoACD_compute_convex_hull.restype = CoACD_ConvexHull
+
+_lib.CoACD_merge.argtypes = [
+    POINTER(CoACD_Mesh),
+    CoACD_MeshArray,
+    CoACD_MeshArray,
+]
+
+_lib.CoACD_merge.restype = CoACD_MeshArray
 
 
 class Mesh:
@@ -405,7 +441,9 @@ def normalize(mesh: Mesh, pca: bool = False):
     )
     mesh.triangles_count = indices.shape[0]
 
-    mesh = _lib.CoACD_normalize(mesh,pca)
+    norm = _lib.CoACD_normalize(mesh,pca)
+
+    mesh = norm.mesh
 
     vertices = np.ctypeslib.as_array(
         mesh.vertices_ptr, (mesh.vertices_count, 3)
@@ -414,7 +452,13 @@ def normalize(mesh: Mesh, pca: bool = False):
         mesh.triangles_ptr, (mesh.triangles_count, 3)
     ).copy()
 
-    return Mesh(vertices, indices)
+    _lib.CoACD_freeMesh(mesh)
+
+    return (norm.xmin,norm.xmax,norm.ymin,norm.ymax,norm.zmin,norm.zmax),Mesh(vertices, indices)
+
+def free_mesh(mesh: Mesh):
+    _lib.CoACD_freeMesh(mesh)
+
 
 def clip(mesh: Mesh, plane: CoACD_Plane):
     vertices = np.ascontiguousarray(mesh.vertices, dtype=np.double)
@@ -450,12 +494,131 @@ def clip(mesh: Mesh, plane: CoACD_Plane):
     _lib.CoACD_freeMeshArray(mesh_array)
     return meshes
 
+def compute_convex_hull(mesh: Mesh):
+    vertices = np.ascontiguousarray(mesh.vertices, dtype=np.double)
+    indices = np.ascontiguousarray(mesh.indices, dtype=np.int32)
+    assert len(vertices.shape) == 2 and vertices.shape[1] == 3
+    assert len(indices.shape) == 2 and indices.shape[1] == 3
+
+    mesh = CoACD_Mesh()
+
+    mesh.vertices_ptr = ctypes.cast(
+        vertices.__array_interface__["data"][0], POINTER(c_double)
+    )
+    mesh.vertices_count = vertices.shape[0]
+
+    mesh.triangles_ptr = ctypes.cast(
+        indices.__array_interface__["data"][0], POINTER(c_int)
+    )
+    mesh.triangles_count = indices.shape[0]
+
+    hull = _lib.CoACD_compute_convex_hull(mesh)
+
+    vertices = np.ctypeslib.as_array(
+        hull.mesh.vertices_ptr, (hull.mesh.vertices_count, 3)
+    ).copy()
+    indices = np.ctypeslib.as_array(
+        hull.mesh.triangles_ptr, (hull.mesh.triangles_count, 3)
+    ).copy()
+
+    _lib.CoACD_freeMesh(hull.mesh)
+
+    concavity = hull.concavity
+
+    return Mesh(vertices, indices), concavity
+
+
+def merge(mesh: Mesh, parts: list, convex_hulls: list):
+    vertices = np.ascontiguousarray(mesh.vertices, dtype=np.double)
+    indices = np.ascontiguousarray(mesh.indices, dtype=np.int32)
+    assert len(vertices.shape) == 2 and vertices.shape[1] == 3
+    assert len(indices.shape) == 2 and indices.shape[1] == 3
+
+    mesh = CoACD_Mesh()
+
+    mesh.vertices_ptr = ctypes.cast(
+        vertices.__array_interface__["data"][0], POINTER(c_double)
+    )
+    mesh.vertices_count = vertices.shape[0]
+
+    mesh.triangles_ptr = ctypes.cast(
+        indices.__array_interface__["data"][0], POINTER(c_int)
+    )
+    mesh.triangles_count = indices.shape[0]
+
+    parts_array = CoACD_MeshArray()
+    parts_array.meshes_count = len(parts)
+    parts_array.meshes_ptr = (CoACD_Mesh * len(parts))()
+
+    for i, part in enumerate(parts):
+        vertices = np.ascontiguousarray(part.vertices, dtype=np.double)
+        indices = np.ascontiguousarray(part.indices, dtype=np.int32)
+        assert len(vertices.shape) == 2 and vertices.shape[1] == 3
+        assert len(indices.shape) == 2 and indices.shape[1] == 3
+
+        part = CoACD_Mesh()
+
+        part.vertices_ptr = ctypes.cast(
+            vertices.__array_interface__["data"][0], POINTER(c_double)
+        )
+        part.vertices_count = vertices.shape[0]
+
+        part.triangles_ptr = ctypes.cast(
+            indices.__array_interface__["data"][0], POINTER(c_int)
+        )
+        part.triangles_count = indices.shape[0]
+
+        parts_array.meshes_ptr[i] = part
+
+    hulls = CoACD_MeshArray()
+    hulls.meshes_count = len(convex_hulls)
+    hulls.meshes_ptr = (CoACD_Mesh * len(convex_hulls))()
+
+    for i, hull in enumerate(convex_hulls):
+        vertices = np.ascontiguousarray(hull.vertices, dtype=np.double)
+        indices = np.ascontiguousarray(hull.indices, dtype=np.int32)
+        assert len(vertices.shape) == 2 and vertices.shape[1] == 3
+        assert len(indices.shape) == 2 and indices.shape[1] == 3
+
+        hull = CoACD_Mesh()
+
+        hull.vertices_ptr = ctypes.cast(
+            vertices.__array_interface__["data"][0], POINTER(c_double)
+        )
+        hull.vertices_count = vertices.shape[0]
+
+        hull.triangles_ptr = ctypes.cast(
+            indices.__array_interface__["data"][0], POINTER(c_int)
+        )
+        hull.triangles_count = indices.shape[0]
+
+        hulls.meshes_ptr[i] = hull
+
+    mesh_array = _lib.CoACD_merge(mesh, parts_array, hulls)
+
+    meshes = []
+    for i in range(mesh_array.meshes_count):
+        mesh = mesh_array.meshes_ptr[i]
+        vertices = np.ctypeslib.as_array(
+            mesh.vertices_ptr, (mesh.vertices_count, 3)
+        ).copy()
+        indices = np.ctypeslib.as_array(
+            mesh.triangles_ptr, (mesh.triangles_count, 3)
+        ).copy()
+        meshes.append([vertices, indices])
+
+    _lib.CoACD_freeMeshArray(mesh_array)
+    _lib.CoACD_freeMeshArray(hulls)
+    _lib.CoACD_freeMeshArray(parts_array)
+
+    return meshes
+
 if __name__ == "__main__":
     import trimesh
 
     set_log_level("debug")
 
-    mesh = trimesh.load("teapot.obj")
+    mesh = trimesh.load("cow-nonormals.obj")
     mesh = Mesh(mesh.vertices, mesh.faces)
     # result = run_coacd(mesh)
     # mesh_parts = []
@@ -469,14 +632,15 @@ if __name__ == "__main__":
     #     scene.add_geometry(p)
     # scene.export("decomposed.obj")
 
-    normilized_mesh = normalize(mesh)
-    scene = trimesh.Scene()
-    scene.add_geometry(trimesh.Trimesh(normilized_mesh.vertices, normilized_mesh.indices))
-    scene.export("normalized.obj")
+    bbox,normilized_mesh = normalize(mesh)
 
-    planes = best_cutting_planes(mesh,merge=False,num_planes=3)
-    for plane in planes:
-        print(plane.a,plane.b,plane.c,plane.d, plane.score)
+    # scene = trimesh.Scene()
+    # scene.add_geometry(trimesh.Trimesh(normilized_mesh.vertices, normilized_mesh.indices))
+    # scene.export("normalized.obj")
+
+    # planes = best_cutting_planes(mesh,merge=False,num_planes=3)
+    # for plane in planes:
+    #     print(plane.a,plane.b,plane.c,plane.d, plane.score)
 
     # result = clip(mesh,plane)
     # mesh_parts = []
